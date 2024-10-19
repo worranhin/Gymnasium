@@ -1,7 +1,7 @@
 # 参考教程 https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 
 import gymnasium as gym
-from gymnasium.wrappers import flatten_observation
+from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
 from collections import namedtuple, deque
 import numpy as np
 import math
@@ -16,7 +16,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Categorical
 
-env = gym.make("CartPole-v1", render_mode="human")
+env = gym.make("CartPole-v1", render_mode="rgb_array")
 
 # set up matplotlib
 is_ipython = "inline" in matplotlib.get_backend()
@@ -160,7 +160,7 @@ def optimize_model():
     # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
     # detailed explanation). This converts batch-array of Transitions
     # to Transition of batch-arrays.
-    batch = Transition(*zip(*transitions))
+    batch = Transition(*zip(*transitions))  # get [(state, state, ...), (action, action, ...), ...]
 
     # Compute a mask of non-final states and concatenate the batch elements
     # (a final state would've been the one after which simulation ended)
@@ -168,8 +168,8 @@ def optimize_model():
         tuple(map(lambda s: s is not None, batch.next_state)),
         device=device,
         dtype=torch.bool,
-    )
-    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+    )  # get [True, False, ...]
+    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])  # get [next_state1, next_state2, ...]
     state_batch = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
     reward_batch = torch.cat(batch.reward)
@@ -203,6 +203,12 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
 
+
+policy_net_state_dict = torch.load("policy_net.pt")
+policy_net.load_state_dict(policy_net_state_dict)
+
+target_net_state_dict = torch.load("target_net.pt")
+target_net.load_state_dict(target_net_state_dict)
 
 if torch.cuda.is_available() or torch.backends.mps.is_available():
     num_episodes = 600
@@ -249,6 +255,10 @@ for i_episode in range(num_episodes):
             episode_durations.append(t + 1)
             plot_durations()
             break
+
+torch.save(policy_net.state_dict(), "policy_net.pt")
+torch.save(target_net.state_dict(), "target_net.pt")
+
 
 print("Complete")
 plot_durations(show_result=True)
